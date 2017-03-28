@@ -25,8 +25,8 @@ using namespace std;
 #define pi 3.1415926
 
 LaserOdomUart::LaserOdomUart():_uartShutDownFlag(false), _uartFd_laser(-1), _uartFd_odom(-1) {
-  
-    _LaserOdomData.timestamp.tv_sec = 0;
+//     cerr<<"The Version of this is 1.2"<<endl;
+     _LaserOdomData.timestamp.tv_sec = 0;
     _LaserOdomData.timestamp.tv_nsec = 0;
     _LaserOdomData.angle_min_ = 0;
     _LaserOdomData.angle_max_ = 2*pi;
@@ -35,22 +35,25 @@ LaserOdomUart::LaserOdomUart():_uartShutDownFlag(false), _uartFd_laser(-1), _uar
     _LaserOdomData.time_increment_ = 0.2/359;
     _LaserOdomData.range_min_ = 0.12;
     _LaserOdomData.range_max_ = 8.;
-    
     _OdomData.X = 0;
     _OdomData.Y = 0;
     _OdomData.Theta = 0;
     _OdomData. frameIndex= -1;
     _OdomData. timestamp.tv_sec= 0;
-    _OdomData. timestamp.tv_nsec= 0;
+    _OdomData. timestamp.tv_usec= 0;
     
     _LaserOdomData.X = 0;
     _LaserOdomData.Y = 0;
     _LaserOdomData.Theta = 0;
      _LaserOdomData.timestamp.tv_sec = 0;
-    _LaserOdomData.timestamp.tv_nsec = 0;
+    _LaserOdomData.timestamp.tv_usec = 0;
     
     _LaserData.timestamp.tv_sec = 0;
-    _LaserData.timestamp.tv_nsec = 0;
+    _LaserData.timestamp.tv_usec = 0;
+    
+    _record.tv_sec = 0;
+    _record.tv_usec = 0;
+    _angle = 0;
     _flag_certain = false;
 
     for(int i=0; i<360; i++) {
@@ -277,14 +280,12 @@ void LaserOdomUart::uartClose(void) {
     }
     if(_uartFd_odom != -1) {
 	close(_uartFd_odom);
-    }        
+    }
 }
 
 void LaserOdomUart::datareceive_laser(void) {
     lds_response_measurement_node_t node;
-
     float tmp_x = 0, tmp_y = 0, real_x = 0, real_y = 0;
-
     _u8 buff[15]={0xaa, 0xaa, 0x10, 0x09, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x1c, 0x55, 0x55};
     write(_uartFd_laser,buff,15);
 //     tcflush(_uartFd_laser,TCIFLUSH); //clear out the buffer!
@@ -292,21 +293,22 @@ void LaserOdomUart::datareceive_laser(void) {
 	if(_uartShutDownFlag == true)   break;   //when receive the signal of uart shutting down, exiting the loop!
 
          gettimeofday(&_start_laser, NULL);
-	  int result = waitNode(&node);
+	 int result = waitNode(&node);
+	 gettimeofday(&_end_laser, NULL);
+      	 std::unique_lock<std::mutex> lk(_OdomDataMutex);
+	 _TmpPose[2] = (_OdomData.Theta + _constDiffTheta)*pi/180.0;
+	 _TmpPose[0] = cos(_constDiffTheta)*_OdomData.X - sin(_constDiffTheta)*_OdomData.Y + _constDiffX;
+	 _TmpPose[1] =sin(_constDiffTheta)*_OdomData.X + cos(_constDiffTheta)*_OdomData.Y + _constDiffY;
+	 lk.unlock();
 	  
 	   _LastPose[2] = (_recordPose[2] + _constDiffTheta)*pi/180.0;
 	   _LastPose[0] = cos(_constDiffTheta)*_recordPose[0] - sin(_constDiffTheta)*_recordPose[1] + _constDiffX;
 	   _LastPose[1] =sin(_constDiffTheta)*_recordPose[0] + cos(_constDiffTheta)*_recordPose[1] + _constDiffY;
 	  
-      	  std::unique_lock<std::mutex> lk(_OdomDataMutex);
-	  _TmpPose[2] = (_OdomData.Theta + _constDiffTheta)*pi/180.0;
-	  _TmpPose[0] = cos(_constDiffTheta)*_OdomData.X - sin(_constDiffTheta)*_OdomData.Y + _constDiffX;
-	  _TmpPose[1] =sin(_constDiffTheta)*_OdomData.X + cos(_constDiffTheta)*_OdomData.Y + _constDiffY;
-	  lk.unlock();
-	  
 	 _DeltaPose[0] = _TmpPose[0] - _LastPose[0]; 
 	 _DeltaPose[1] = _TmpPose[1] - _LastPose[1];
 	 _DeltaPose[2] = _TmpPose[2] - _LastPose[2];
+//          cerr<<"Real diff is   "<< "                  "<<_DeltaPose[2]<<endl;
 	 if(_DeltaPose[2]<-pi) {
 	      _DeltaPose[2] += 2*pi;      
 	 }
@@ -314,29 +316,40 @@ void LaserOdomUart::datareceive_laser(void) {
 	      _DeltaPose[2] -= 2*pi;
 	 }
 
-         gettimeofday(&_end_laser, NULL);
 	 int timeuse = 1000000 * ( _end_laser.tv_sec - _start_laser.tv_sec ) + _end_laser.tv_usec -_start_laser.tv_usec;
+// 	 cerr<<"Timeuse is   "<<timeuse<<endl;
 	 if(timeuse < 160000 && timeuse > 100000) {
-// 	    cerr<<"nice"<<endl;
-// 	    cerr<<"Tmp odom diff is that   "<<_DeltaPose[0]<<"   "<<_DeltaPose[1]<<"   "<<_DeltaPose[2]<<endl;
-// 	    std::lock_guard<std::mutex> lk1(_LaserDataMutex);
 	    std::unique_lock<std::mutex> lk2(_LaserOdomDataMutex);
 	    for(int i=0; i<360; i++) {
-// 		  cerr<<"Tmp Point is   "<<i<<"    "<<_LaserData.Distance[i]<<endl;
+// 		  cerr<<"Tmp Point is   "<<i<<"    "<<node.data[359-i].Distance<<endl;
 		  _LaserOdomData.TmpX[i] = node.data[359-i].Distance *cos(i*pi/180)/1000.0; 
 		  _LaserOdomData.TmpY[i] = node.data[359-i].Distance *sin(i*pi/180)/1000.0; 
 		  real_x = cos(i*_DeltaPose[2]/360)*_LaserOdomData.TmpX[i]  - sin(i*_DeltaPose[2]/360)*_LaserOdomData.TmpY[i]  + i*_DeltaPose[0]/360;
 		  real_y = sin(i*_DeltaPose[2]/360)*_LaserOdomData.TmpX[i] + cos(i*_DeltaPose[2]/360)*_LaserOdomData.TmpY[i]  + i*_DeltaPose[1]/360;
-		  _LaserOdomData.Distance[i] = sqrt(pow(real_x, 2) + pow(real_y, 2));
-  		 if(sqrt(pow(real_x-_constDiffX, 2)+pow(real_y, 2)) >=0.2) {
-		      _LaserOdomData.TmpX[i] =cos(_constDiffTheta)*real_x - sin(_constDiffTheta)*real_y - _constDiffX;
-		      _LaserOdomData.TmpY[i] =sin(_constDiffTheta)*real_x + cos(_constDiffTheta)*real_y - _constDiffY;
-		 }
-		 else {
-		      _LaserOdomData.TmpX[i] = 0;
-		      _LaserOdomData.TmpY[i] = 0;
-		}
-	    }
+// 		  cerr<<"Real Point is   "<<i<<"    X: "<<real_x<<"      Y: "<<real_y<<endl;		
+		  _LaserOdomData.Angle[i] = atan2(real_y, real_x);
+		  if(_LaserOdomData.Angle[i] < 0) _LaserOdomData.Angle[i] += 2*pi;
+// 		  cerr<<"Real Point angle is   "<< i << "                  "<<_LaserOdomData.Angle[i]*180/pi<<endl;	
+		  _LaserData.Distance[i] = sqrt(pow(real_x, 2)+pow(real_y, 2));
+	   }
+	  
+	  for(int i=0; i<360; i++) {
+	       _angle = _LaserOdomData.Angle[i]*180/pi;
+	       _LaserOdomData.Distance[_angle] =  _LaserData.Distance[i];
+	  }
+
+	  // 	   for(int i=0; i<360; i++) {
+// 		_LaserOdomData.TmpX[i] = 0;
+// 		_LaserOdomData.TmpY[i] = 0;
+// 	  }
+// 	  for(int i=0; i<360; i++) {
+// 	       _angle = _LaserOdomData.Angle[i]*180/pi;
+// 	       _LaserOdomData.TmpX[_angle] =cos(_LaserOdomData.Angle[i])*_LaserOdomData.Distance[i];
+// 	       _LaserOdomData.TmpY[_angle] =sin(_LaserOdomData.Angle[i])*_LaserOdomData.Distance[i];
+// 	       _LaserOdomData.TmpX[_angle] =cos(_constDiffTheta)*_LaserOdomData.TmpX[_angle] - sin(_constDiffTheta)*_LaserOdomData.TmpY[_angle] - _constDiffX;
+// 	       _LaserOdomData.TmpY[_angle] =sin(_constDiffTheta)*_LaserOdomData.TmpX[_angle] + cos(_constDiffTheta)*_LaserOdomData.TmpY[_angle] - _constDiffY;
+// 	  }
+
 	    _LaserOdomData.X = _recordPose[0];
 	    _LaserOdomData.Y = _recordPose[1];
 	    _LaserOdomData.Theta = _recordPose[2];
@@ -356,9 +369,11 @@ void LaserOdomUart::datareceive_odom(void) {
 	      waitNode_odom(&node_odom);
 	      std::unique_lock<std::mutex> lk(_OdomDataMutex);
               //ascend the odom data!
+	      _OdomData.timestamp = node_odom.timestamp;
 	      _OdomData.X = node_odom.X/1000.0;
 	      _OdomData.Y = node_odom.Y/1000.0;
 	      _OdomData.Theta = node_odom.Theta/1000.0;
+// 	      cerr <<_OdomData.X<<"        "<< _OdomData.Y <<"        "<<_OdomData.Theta  <<endl;
 	      lk.unlock();
     }
 }
@@ -372,11 +387,13 @@ int LaserOdomUart::waitNode(lds_response_measurement_node_t *node) {
        _u32 time_out = 160;
        int recvSize, result = 0;
        
-      std::unique_lock<std::mutex> lk0(_OdomDataMutex);
-      _recordPose[0] = _OdomData.X;
-      _recordPose[1] = _OdomData.Y;
-      _recordPose[2] = _OdomData.Theta;
-      lk0.unlock(); 
+	std::unique_lock<std::mutex> lk0(_OdomDataMutex);
+	_recordPose[0] = _OdomData.X;
+	_recordPose[1] = _OdomData.Y;
+	_recordPose[2] = _OdomData.Theta;
+	_record = _OdomData.timestamp;
+// 	cerr <<_OdomData.X<<"        " << _OdomData.Y <<"        "<<_OdomData.Theta  <<endl;
+	lk0.unlock(); 
        while(1) {
             if(_uartShutDownFlag == true) break;
            remainSize = sizeof(lds_response_measurement_node_t) - recvPos;
@@ -408,7 +425,8 @@ int LaserOdomUart::waitNode(lds_response_measurement_node_t *node) {
                   }
                   break;
 		  case 6: {
-                       if(currentByte == 0x3e)  { }
+                       if(currentByte == 0x3e)  {
+		      }
                        else {
                            recvPos = 0;
                            continue;
@@ -425,20 +443,18 @@ int LaserOdomUart::waitNode(lds_response_measurement_node_t *node) {
 		    nodeBuffer[recvPos++] = currentByte;
 		}
            }
-           if (recvPos == sizeof(lds_response_measurement_node_t)) {
-                return 0;
-           }
+           if (recvPos == sizeof(lds_response_measurement_node_t))   return 0;
      }
 }
 
 int LaserOdomUart::waitNode_odom(lds_response_measurement_node_odom_t *node_odom) {
        int  recvPos = 0;
-       _u8  recvBuffer[sizeof(lds_response_measurement_node_odom_t)];
+       _u8  recvBuffer[sizeof(lds_response_measurement_node_odom_t) - sizeof(timeval)];
        _u8 *nodeBuffer_odom = (_u8*)node_odom;
 
        while(1) {
            if(_uartShutDownFlag == true) break;
-           int remainSize = sizeof(lds_response_measurement_node_odom_t) - recvPos;
+           int remainSize = sizeof(lds_response_measurement_node_odom_t)  - sizeof(timeval) - recvPos;
            int recvSize;
            waitfordata_odom(remainSize,  &recvSize);
            if (recvSize > remainSize) recvSize = remainSize;
@@ -453,7 +469,7 @@ int LaserOdomUart::waitNode_odom(lds_response_measurement_node_odom_t *node_odom
 		  }
 		  break;
 		  case 3: {
-			  if ( currentByte == 0x67) {}
+			  if ( currentByte == 0x43) {}
 			  else {
 			      recvPos = 0;
 			      continue;
@@ -471,7 +487,10 @@ int LaserOdomUart::waitNode_odom(lds_response_measurement_node_odom_t *node_odom
 	       }
                nodeBuffer_odom[recvPos++] = currentByte;
            }
-           if (recvPos == sizeof(lds_response_measurement_node_odom_t))  return 0; 
+           if (recvPos == sizeof(lds_response_measurement_node_odom_t) - sizeof(timeval))  {
+	       gettimeofday(&node_odom->timestamp, NULL);
+	       return 0; 
+	   }
         }
 }
 

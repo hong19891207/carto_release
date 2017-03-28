@@ -61,11 +61,12 @@ typedef struct _lds_response_measurement_node_odom_t {
     _s16   Y;
     _s32   Theta;
     _u8     tail;
+    timeval timestamp;
 }__attribute__((packed)) lds_response_measurement_node_odom_t;
 
 //[ x, y, theta] data structure
 typedef struct ODOM_DATA{
-    timespec timestamp;
+    timeval timestamp;
     int frameIndex;
     float X;
     float Y;
@@ -73,7 +74,7 @@ typedef struct ODOM_DATA{
 }Odom_Data;
 
 typedef struct LASER_DATA{
-    timespec timestamp;
+    timeval timestamp;
     int frameIndex;
     float Distance[360];
     float Angle[360];
@@ -92,6 +93,7 @@ typedef struct LASER_ODOM_DATA{
     float range_max_;
     float Distance[360];
     float Angle[360];
+//     float Distance_tmp[360];
     float TmpX[360];
     float TmpY[360];
     float X;
@@ -134,13 +136,15 @@ protected:
     float _constDiffX;
     float _constDiffY;
     float _constDiffTheta;
+    int _angle;
 
     float _DeltaPose[3], _LastPose[3], _TmpPose[3], _recordPose[3];
+    struct timeval _record;
     struct timeval _start_laser;
     struct timeval _end_laser;
 
     
-    lds_response_measurement_node_t       _cached_scan_node_buf[60];
+    lds_response_measurement_node_t       _cached_scan_node_buf[10];
     lds_response_measurement_node_odom_t       _cached_scan_node_buf_odom[6];
     
     std::mutex _LaserDataMutex;
