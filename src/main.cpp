@@ -81,14 +81,11 @@ class Carto {
         RealTimeCorrelativeScanMatcher  real_time_correlative_scan_matcher_;
         ScanMatcher scan_matcher_;
         MotionFilter motion_filter_;
-//         int m_ = 0;
-//         int width_ = 0;
-//         int height_ = 0;
         std::vector<uint8_t>  rgb_;
-//         std::mutex Map_show;
+
         float angle_increase_;
         Eigen::Matrix3f covMatrix_;
-//         float angle_tmp_;
+
         // Scan match 'laser_fan_in_tracking_2d' and fill in the
         // 'pose_observation' and 'covariance_observation' with the result.  kalman_filter::PoseCovariance* covariance_observation
         void ScanMatch(Time time, const transform::Rigid2f& pose_prediction,
@@ -104,7 +101,6 @@ Carto::Carto() {
 //     angle_tmp_ = 0;
     covMatrix_ = Eigen::Matrix3f::Zero();
 }
-
 Carto::~Carto() {
     if(t1.joinable()) {
         t1.join();
