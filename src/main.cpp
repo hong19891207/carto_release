@@ -91,7 +91,6 @@ class Carto {
         void ScanMatch(Time time, const transform::Rigid2f& pose_prediction,
                        const LaserFan& laser_fan,
                        transform::Rigid2f* pose_observation );
-
 };
 
 Carto::Carto() {
@@ -101,6 +100,7 @@ Carto::Carto() {
 //     angle_tmp_ = 0;
     covMatrix_ = Eigen::Matrix3f::Zero();
 }
+
 Carto::~Carto() {
     if(t1.joinable()) {
         t1.join();
@@ -170,14 +170,15 @@ std::unique_ptr<Carto::InsertionResult> Carto::AddHorizontalLaserFan(const times
 //     pose_predict_increase_ = transform::Rigid2f(transform::Rigid2f::Vector(laser_odom_data.X - pose_predict_.translation().x(), laser_odom_data.Y - pose_predict_.translation().y()),
 //                                                (laser_odom_data.Theta - pose_predict_.rotation().angle()));
     angle_increase_ = laser_odom_data.Theta - pose_predict_.rotation().angle();
-    if(abs(angle_increase_) >= pi/6) {
-        angle_increase_ = 0;
-    }
+
     if(angle_increase_  > pi) {
             angle_increase_ = (-pi - pose_predict_.rotation().angle()) + (laser_odom_data.Theta - pi);
     }
     else if(angle_increase_  < -pi) {
            angle_increase_ = (pi - pose_predict_.rotation().angle()) + (laser_odom_data.Theta + pi);
+    }
+    if(abs(angle_increase_) >= pi/6) {
+        angle_increase_ = 0;
     }
     pose_predict_increase_ = transform::Rigid2f(transform::Rigid2f::Vector(laser_odom_data.X - pose_predict_.translation().x(), laser_odom_data.Y - pose_predict_.translation().y()),
                                                 angle_increase_ );
